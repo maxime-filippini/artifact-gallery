@@ -61,23 +61,23 @@ describe("Artifact Index", () => {
   });
 });
 
-describe("Gallery", () => {
-  test("renders a catalog that links to the configured Artifact Origin", async () => {
+describe("Gallery API", () => {
+  test("returns a catalog that links to the configured Artifact Origin", async () => {
     const fetchGallery = createGallery({ library, artifactOrigin: "https://artifacts.example.ts.net" });
-    const response = await fetchGallery(new Request("http://gallery.test/"));
-    const page = await response.text();
+    const response = await fetchGallery(new Request("http://gallery.test/api/artifacts"));
+    const index = await response.json();
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
-    expect(page).toContain("Review Queue");
-    expect(page).toContain("https://artifacts.example.ts.net/risk-report/index.html");
-    expect(page).toContain("A &lt;script&gt;review&lt;/script&gt;");
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(index).toMatchObject({
+      queue: [{ url: "https://artifacts.example.ts.net/risk-report/index.html" }],
+    });
   });
 
-  test("accepts only GET requests at the catalog route", async () => {
+  test("accepts only GET requests at the API route", async () => {
     const fetchGallery = createGallery({ library, artifactOrigin: "https://artifacts.example.ts.net" });
 
-    expect((await fetchGallery(new Request("http://gallery.test/", { method: "POST" }))).status).toBe(405);
+    expect((await fetchGallery(new Request("http://gallery.test/api/artifacts", { method: "POST" }))).status).toBe(405);
     expect((await fetchGallery(new Request("http://gallery.test/missing"))).status).toBe(404);
   });
 });

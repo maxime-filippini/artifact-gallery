@@ -6,11 +6,19 @@
     "moduleResolution": "bundler",
     "moduleDetection": "force",
     "allowImportingTsExtensions": true,
+    "allowArbitraryExtensions": true,
+    "jsx": "react-jsx",
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "strict": true,
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["apps/*/src/**/*.ts", "apps/*/tests/**/*.ts"]
+  "include": [
+    "apps/*/src/**/*.ts",
+    "apps/*/client/**/*.ts",
+    "apps/*/client/**/*.tsx",
+    "apps/*/client/**/*.d.ts",
+    "apps/*/tests/**/*.ts"
+  ]
 }

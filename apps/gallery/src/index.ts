@@ -1,6 +1,7 @@
 import { lstat, readdir, readFile, realpath } from "node:fs/promises";
 import type { Dirent } from "node:fs";
-import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { join, resolve, sep } from "node:path";
 
 const DEFAULT_LIBRARY = "~/dev/review-artifacts";
 const DEFAULT_ORIGIN = "http://127.0.0.1:8766";
@@ -24,6 +25,7 @@ export interface ArtifactIndex {
 export interface GalleryOptions {
   artifactOrigin: string;
   library: string;
+  staticRoot?: string;
 }
 
 interface ArtifactMetadata {
@@ -169,51 +171,33 @@ export async function readArtifactIndex({
   return { queue, archive };
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => {
-    const entities: Record<string, string> = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    };
-    return entities[character];
-  });
-}
+async function serveStaticFile(staticRoot: string, pathname: string): Promise<Response> {
+  const root = resolve(staticRoot);
+  const target = pathname === "/" ? join(root, "index.html") : resolve(root, `.${pathname}`);
+  if (!target.startsWith(`${root}${sep}`)) return new Response(null, { status: 404 });
 
-function artifactCard(artifact: ReviewArtifact): string {
-  const description = artifact.description
-    ? `<p>${escapeHtml(artifact.description)}</p>`
-    : "";
-  return `<li><a href="${escapeHtml(artifact.url)}" rel="noopener noreferrer">${escapeHtml(artifact.title)}</a>${description}<small>${escapeHtml(artifact.name)}</small></li>`;
-}
-
-function section(title: string, artifacts: ReviewArtifact[]): string {
-  const content = artifacts.length
-    ? `<ul>${artifacts.map(artifactCard).join("")}</ul>`
-    : "<p>No artifacts.</p>";
-  return `<section><h2>${title}</h2>${content}</section>`;
-}
-
-function galleryPage(index: ArtifactIndex): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Artifact Gallery</title><style>body{font-family:system-ui,sans-serif;line-height:1.5;margin:0 auto;max-width:48rem;padding:2rem}section{margin-block:2rem}ul{display:grid;gap:1rem;list-style:none;padding:0}li{border:1px solid #ddd;border-radius:.5rem;padding:1rem}a{font-weight:700}p,small{display:block;margin:.5rem 0 0}</style></head><body><header><h1>Artifact Gallery</h1><p>Review artifacts open at their separate Artifact Origin.</p></header><main>${section("Review Queue", index.queue)}${section("Review Archive", index.archive)}</main></body></html>`;
+  try {
+    const stats = await lstat(target);
+    if (!stats.isFile() || stats.isSymbolicLink()) return new Response(null, { status: 404 });
+    return new Response(Bun.file(target), { headers: { "X-Content-Type-Options": "nosniff" } });
+  } catch {
+    return new Response(null, { status: 404 });
+  }
 }
 
 export function createGallery(options: GalleryOptions) {
   return async function fetch(request: Request): Promise<Response> {
     if (request.method !== "GET")
       return new Response(null, { status: 405, headers: { Allow: "GET" } });
-    if (new URL(request.url).pathname !== "/")
-      return new Response(null, { status: 404 });
+    const pathname = new URL(request.url).pathname;
 
-    const index = await readArtifactIndex(options);
-    return new Response(galleryPage(index), {
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "X-Content-Type-Options": "nosniff",
-      },
-    });
+    if (pathname === "/api/artifacts") {
+      const index = await readArtifactIndex(options);
+      return Response.json(index, {
+        headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
+      });
+    }
+    return options.staticRoot ? serveStaticFile(options.staticRoot, pathname) : new Response(null, { status: 404 });
   };
 }
 
@@ -229,6 +213,7 @@ if (import.meta.main) {
     fetch: createGallery({
       artifactOrigin: process.env.ARTIFACT_ORIGIN ?? DEFAULT_ORIGIN,
       library: process.env.ARTIFACT_LIBRARY ?? DEFAULT_LIBRARY,
+      staticRoot: fileURLToPath(new URL("../dist", import.meta.url)),
     }),
   });
   console.log(`Gallery listening on http://127.0.0.1:${server.port}`);
