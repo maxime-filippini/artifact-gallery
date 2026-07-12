@@ -1,5 +1,9 @@
 {
   "name": "@artifact-gallery/gallery",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "test": "bun test"
+  }
 }
