@@ -80,4 +80,42 @@ describe("Gallery API", () => {
     expect((await fetchGallery(new Request("http://gallery.test/api/artifacts", { method: "POST" }))).status).toBe(405);
     expect((await fetchGallery(new Request("http://gallery.test/missing"))).status).toBe(404);
   });
+
+  test("moves artifacts between the queue and archive", async () => {
+    const fetchGallery = createGallery({
+      library,
+      artifactOrigin: "https://artifacts.example.ts.net",
+      csrfToken: "test-token",
+    });
+
+    const review = await fetchGallery(new Request("http://gallery.test/api/artifacts/risk-report/review", {
+      method: "POST",
+      headers: { "X-CSRF-Token": "test-token", "Sec-Fetch-Site": "same-origin" },
+    }));
+    expect(review.status).toBe(204);
+    expect((await readArtifactIndex({ library, artifactOrigin: "https://artifacts.example.ts.net" })).queue).toHaveLength(0);
+    expect((await readArtifactIndex({ library, artifactOrigin: "https://artifacts.example.ts.net" })).archive).toHaveLength(2);
+
+    const restore = await fetchGallery(new Request("http://gallery.test/api/artifacts/risk-report/restore", {
+      method: "POST",
+      headers: { "X-CSRF-Token": "test-token", "Sec-Fetch-Site": "same-origin" },
+    }));
+    expect(restore.status).toBe(204);
+    expect((await readArtifactIndex({ library, artifactOrigin: "https://artifacts.example.ts.net" })).queue).toHaveLength(1);
+  });
+
+  test("rejects cross-site or tokenless state changes", async () => {
+    const fetchGallery = createGallery({
+      library,
+      artifactOrigin: "https://artifacts.example.ts.net",
+      csrfToken: "test-token",
+    });
+
+    const response = await fetchGallery(new Request("http://gallery.test/api/artifacts/risk-report/review", {
+      method: "POST",
+      headers: { "Sec-Fetch-Site": "cross-site" },
+    }));
+    expect(response.status).toBe(403);
+    expect((await readArtifactIndex({ library, artifactOrigin: "https://artifacts.example.ts.net" })).queue).toHaveLength(1);
+  });
 });
