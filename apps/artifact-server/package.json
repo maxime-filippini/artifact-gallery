@@ -1,0 +1,9 @@
+{
+  "name": "@artifact-gallery/artifact-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "test": "bun test"
+  }
+}

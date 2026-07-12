@@ -1,0 +1,12 @@
+{
+  "name": "artifact-gallery-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "artifact-server": "bun run --cwd apps/artifact-server start",
+    "test": "bun test apps/artifact-server/tests"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "name": "@artifact-gallery/gallery",
+  "private": true,
+  "type": "module"
+}
