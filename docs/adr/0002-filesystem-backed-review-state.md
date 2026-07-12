@@ -1,0 +1,3 @@
+# Store review state in the artifact library
+
+Marking an artifact reviewed moves its directory from the Artifact Library's active top level into the hidden `.reviewed` archive directory; restoring reverses that move. The Artifact Server serves archived artifacts at their `.reviewed` paths but denies `.hidden` paths. The separate `.hidden` directory retains artifacts that must be excluded from both the gallery and artifact server and is managed directly in the filesystem. The gallery derives its Review Queue and Review Archive from this layout instead of storing review state in a database, preserving a portable and inspectable artifact library while keeping active artifact names conflict-free.

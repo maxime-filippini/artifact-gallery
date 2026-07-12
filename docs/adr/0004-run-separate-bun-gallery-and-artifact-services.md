@@ -1,0 +1,3 @@
+# Run separate Bun gallery and artifact services
+
+The gallery backend and Artifact Server run as separate Bun processes on distinct, configurable ports (`8765` and `8766` by default) and bind only to loopback. Tailscale Serve proxies them to separate private HTTPS endpoints on the same ports, preserving the origin boundary without exposing either process to the LAN. The Artifact Server is a deliberately narrow static server: it serves only direct, non-symlink paths beneath the Artifact Library, with no directory listings or CORS, while the gallery owns discovery and reversible review-state changes.
