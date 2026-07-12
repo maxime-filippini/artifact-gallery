@@ -6,7 +6,10 @@
     "apps/*"
   ],
   "scripts": {
-    "artifact-server": "bun run --cwd apps/artifact-server start",
+    "artifact-server": "bun apps/artifact-server/src/index.ts",
+    "gallery": "bun apps/gallery/src/index.ts",
+    "gallery:dev": "bun run --cwd apps/gallery dev",
+    "gallery:build": "bun run --cwd apps/gallery build",
     "test": "bun test apps",
     "typecheck": "tsc --noEmit"
   },
