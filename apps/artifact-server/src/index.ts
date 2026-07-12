@@ -63,7 +63,10 @@ function requestSegments(request: Request): string[] | undefined {
   }
 
   try {
-    const segments = pathname.split("/").filter(Boolean).map(decodeURIComponent);
+    const segments = pathname
+      .split("/")
+      .filter(Boolean)
+      .map(decodeURIComponent);
     return segments.some(
       (segment) =>
         !segment ||
@@ -80,7 +83,10 @@ function requestSegments(request: Request): string[] | undefined {
   }
 }
 
-async function isRegularNonSymlinkFile(root: string, path: string): Promise<boolean> {
+async function isRegularNonSymlinkFile(
+  root: string,
+  path: string,
+): Promise<boolean> {
   const relativePath = path.slice(root.length + 1);
   let current = root;
 
@@ -124,7 +130,8 @@ export function createArtifactServer({ library }: ArtifactServerOptions) {
     }
 
     const target = resolve(root, ...segments);
-    if (!isAbsolute(target) || !target.startsWith(`${root}${sep}`)) return response(404);
+    if (!isAbsolute(target) || !target.startsWith(`${root}${sep}`))
+      return response(404);
     if (!(await isRegularNonSymlinkFile(root, target))) return response(404);
 
     const headers = artifactHeaders(target);
