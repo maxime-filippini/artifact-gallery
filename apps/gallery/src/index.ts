@@ -335,7 +335,7 @@ if (import.meta.main) {
     fetch: createGallery({
       artifactOrigin: process.env.ARTIFACT_ORIGIN ?? DEFAULT_ORIGIN,
       library: process.env.ARTIFACT_LIBRARY ?? DEFAULT_LIBRARY,
-      staticRoot: fileURLToPath(new URL("../dist", import.meta.url)),
+      staticRoot: process.env.GALLERY_STATIC_ROOT ?? fileURLToPath(new URL("../dist", import.meta.url)),
     }),
   });
   console.log(`Gallery listening on http://127.0.0.1:${server.port}`);

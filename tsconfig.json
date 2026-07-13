@@ -19,6 +19,7 @@
     "apps/*/client/**/*.ts",
     "apps/*/client/**/*.tsx",
     "apps/*/client/**/*.d.ts",
-    "apps/*/tests/**/*.ts"
+    "apps/*/tests/**/*.ts",
+    "scripts/**/*.ts"
   ]
 }

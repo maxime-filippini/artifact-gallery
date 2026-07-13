@@ -10,6 +10,8 @@
     "gallery": "bun apps/gallery/src/index.ts",
     "gallery:dev": "bun run --cwd apps/gallery dev",
     "gallery:build": "bun run --cwd apps/gallery build",
+    "build:release": "bun scripts/build-release.ts",
+    "launchd:install": "bun scripts/install-launchd.ts",
     "test": "bun test apps",
     "typecheck": "tsc --noEmit"
   },
