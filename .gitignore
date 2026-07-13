@@ -1,4 +1,5 @@
 .local/
 apps/*/dist/
+build/
 node_modules
 .vscode

@@ -27,3 +27,20 @@ Run the automated checks with:
 ```sh
 bun test
 ```
+
+## macOS startup
+
+Build standalone macOS executables for both services, then install LaunchAgents
+that start them at login and restart them after an unexpected exit:
+
+```sh
+bun run build:release
+ARTIFACT_ORIGIN="https://mmbp.follow-scylla.ts.net:8766" bun run launchd:install
+```
+
+The installer creates the Artifact Library at `~/dev/review-artifacts` unless
+`ARTIFACT_LIBRARY` is set, writes the LaunchAgents under
+`~/Library/LaunchAgents`, and writes logs to `~/Library/Logs/artifact-gallery`.
+It uses loopback ports `8765` (Gallery) and `8766` (Artifact Server). Configure
+Tailscale Serve to proxy those same ports to make the services reachable in the
+Tailnet.
