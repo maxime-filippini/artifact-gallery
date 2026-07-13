@@ -1,4 +1,12 @@
-import { lstat, readdir, readFile, realpath } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+} from "node:fs/promises";
+import { Hono } from "hono";
 import type { Dirent } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join, resolve, sep } from "node:path";
@@ -7,6 +15,8 @@ const DEFAULT_LIBRARY = "~/dev/review-artifacts";
 const DEFAULT_ORIGIN = "http://127.0.0.1:8766";
 const DEFAULT_PORT = 8765;
 const ARTIFACT_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const ACTION_PATH =
+  /^\/api\/artifacts\/([a-z0-9]+(?:-[a-z0-9]+)*)\/(review|restore)$/;
 
 export interface ReviewArtifact {
   description?: string;
@@ -24,6 +34,7 @@ export interface ArtifactIndex {
 
 export interface GalleryOptions {
   artifactOrigin: string;
+  csrfToken?: string;
   library: string;
   staticRoot?: string;
 }
@@ -95,6 +106,81 @@ async function regularFile(path: string): Promise<boolean> {
   }
 }
 
+async function artifactLibraryRoot(
+  library: string,
+): Promise<string | undefined> {
+  try {
+    const root = await realpath(configuredPath(library));
+    const stats = await lstat(root);
+    return stats.isDirectory() && !stats.isSymbolicLink() ? root : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function artifactDirectory(path: string): Promise<boolean> {
+  try {
+    const stats = await lstat(path);
+    return (
+      stats.isDirectory() &&
+      !stats.isSymbolicLink() &&
+      (await regularFile(join(path, "index.html")))
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function ensureArchiveDirectory(path: string): Promise<boolean> {
+  try {
+    await mkdir(path);
+  } catch {
+    // An existing archive is expected; its type is checked below.
+  }
+
+  try {
+    const stats = await lstat(path);
+    return stats.isDirectory() && !stats.isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function moveArtifact(
+  library: string,
+  name: string,
+  action: "review" | "restore",
+): Promise<number> {
+  if (!ARTIFACT_NAME.test(name)) return 404;
+  const root = await artifactLibraryRoot(library);
+  if (!root) return 404;
+
+  const archive = join(root, ".reviewed");
+  if (action === "review" && !(await ensureArchiveDirectory(archive)))
+    return 500;
+
+  const source = action === "review" ? join(root, name) : join(archive, name);
+  const target = action === "review" ? join(archive, name) : join(root, name);
+  if (!(await artifactDirectory(source))) return 404;
+  if (await pathExists(target)) return 409;
+
+  try {
+    await rename(source, target);
+    return 204;
+  } catch {
+    return 500;
+  }
+}
+
 function artifactUrl(
   origin: string,
   location: ReviewArtifact["location"],
@@ -153,15 +239,14 @@ export async function readArtifactIndex({
   library,
   artifactOrigin,
 }: GalleryOptions): Promise<ArtifactIndex> {
-  let root = configuredPath(library);
+  const root = await artifactLibraryRoot(library);
   let resolvedOrigin: string;
   try {
     resolvedOrigin = new URL(artifactOrigin).toString();
-    root = await realpath(root);
-    if (!(await lstat(root)).isDirectory()) return { queue: [], archive: [] };
   } catch {
     return { queue: [], archive: [] };
   }
+  if (!root) return { queue: [], archive: [] };
 
   const [queue, archive] = await Promise.all([
     readArtifacts(root, "queue", resolvedOrigin),
@@ -171,34 +256,71 @@ export async function readArtifactIndex({
   return { queue, archive };
 }
 
-async function serveStaticFile(staticRoot: string, pathname: string): Promise<Response> {
+async function serveStaticFile(
+  staticRoot: string,
+  pathname: string,
+): Promise<Response> {
   const root = resolve(staticRoot);
-  const target = pathname === "/" ? join(root, "index.html") : resolve(root, `.${pathname}`);
-  if (!target.startsWith(`${root}${sep}`)) return new Response(null, { status: 404 });
+  const target =
+    pathname === "/" ? join(root, "index.html") : resolve(root, `.${pathname}`);
+  if (!target.startsWith(`${root}${sep}`))
+    return new Response(null, { status: 404 });
 
   try {
     const stats = await lstat(target);
-    if (!stats.isFile() || stats.isSymbolicLink()) return new Response(null, { status: 404 });
-    return new Response(Bun.file(target), { headers: { "X-Content-Type-Options": "nosniff" } });
+    if (!stats.isFile() || stats.isSymbolicLink())
+      return new Response(null, { status: 404 });
+    return new Response(Bun.file(target), {
+      headers: { "X-Content-Type-Options": "nosniff" },
+    });
   } catch {
     return new Response(null, { status: 404 });
   }
 }
 
 export function createGallery(options: GalleryOptions) {
-  return async function fetch(request: Request): Promise<Response> {
-    if (request.method !== "GET")
-      return new Response(null, { status: 405, headers: { Allow: "GET" } });
-    const pathname = new URL(request.url).pathname;
+  const csrfToken = options.csrfToken ?? crypto.randomUUID();
+  const app = new Hono();
 
-    if (pathname === "/api/artifacts") {
-      const index = await readArtifactIndex(options);
-      return Response.json(index, {
-        headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
-      });
+  app.get("/api/artifacts", async (context) => {
+    const index = await readArtifactIndex(options);
+    context.header("Cache-Control", "no-store");
+    context.header("X-Content-Type-Options", "nosniff");
+    return context.json({ ...index, csrfToken });
+  });
+
+  app.post("/api/artifacts/:name/:action", async (context) => {
+    const { action, name } = context.req.param();
+    if (
+      !ACTION_PATH.test(context.req.path) ||
+      (action !== "review" && action !== "restore")
+    ) {
+      return context.notFound();
     }
-    return options.staticRoot ? serveStaticFile(options.staticRoot, pathname) : new Response(null, { status: 404 });
-  };
+
+    const fetchSite = context.req.header("Sec-Fetch-Site");
+    const sameSite =
+      !fetchSite || fetchSite === "same-origin" || fetchSite === "same-site";
+    if (!sameSite || context.req.header("X-CSRF-Token") !== csrfToken) {
+      return context.body(null, 403);
+    }
+
+    const status = await moveArtifact(options.library, name, action);
+    return context.body(null, status as 204 | 404 | 409 | 500);
+  });
+
+  app.all("/api/*", (context) =>
+    context.body(null, 405, { Allow: "GET, POST" }),
+  );
+
+  app.get("*", (context) => {
+    return options.staticRoot
+      ? serveStaticFile(options.staticRoot, context.req.path)
+      : context.notFound();
+  });
+  app.all("*", (context) => context.body(null, 405, { Allow: "GET" }));
+
+  return app.fetch;
 }
 
 if (import.meta.main) {

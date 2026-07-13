@@ -9,6 +9,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "hono": "^4.12.29",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
